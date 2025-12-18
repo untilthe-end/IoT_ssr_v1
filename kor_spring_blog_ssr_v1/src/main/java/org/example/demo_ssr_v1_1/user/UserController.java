@@ -87,9 +87,6 @@ public class UserController {
         }
     }
 
-
-
-
     // 회원가입 화면 요청
     // http://localhost:8080/join
     @GetMapping("/join")

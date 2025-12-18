@@ -35,8 +35,8 @@ public interface BoardRepository extends JpaRepository<Board, Long> {
     // 게시글 전체 조회 (페이징 처리)
     // - 인수값은 우리가 생성한 Pageable 객체를 넣어 주면 된다.
     // - 리턴 타입은 Page 객체로 반환 된다.
+
     /**
-     *
      * @param pageable 페이징 정보(페이지 번호, 페이지 크기, 정렬)
      * @return 페이징된 BoardList 를 가지고 있다(단 작성자 정보 포함)
      * ** JOIN FETCH 때문에 하이버 네이트가 쿼리를 이상하게 작성하는 것을 막는 처리 **
@@ -46,6 +46,19 @@ public interface BoardRepository extends JpaRepository<Board, Long> {
     @Query(value = "SELECT DISTINCT b FROM Board b JOIN FETCH b.user ORDER BY b.createdAt DESC",
             countQuery = "SELECT COUNT(DISTINCT b) FROM Board b")
     Page<Board> findAllWithUserOrderByCreatedAtDesc(Pageable pageable);
+
+
+    /**
+     * 게시글 검색 (제목 or 내용, 페이징 포함)
+     */
+    @Query(value = "SELECT DISTINCT b FROM Board b JOIN FETCH b.user " +
+            "WHERE LOWER(b.title) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+            "OR LOWER(b.content) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+            "ORDER BY b.createdAt DESC",
+            countQuery = "SELECT COUNT(DISTINCT b) FROM Board b " +
+                    "WHERE LOWER(b.title) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+                    "OR LOWER(b.content) LIKE LOWER(CONCAT('%', :keyword, '%'))")
+    Page<Board> findByTitleContainingOrContentContaining(@Param("keyword") String keyword, Pageable pageable);
 
     // 게시글 ID로 조회 (작성자 정보 포함 - JOIN FETCH 사용해야 함)
     @Query("SELECT b FROM Board b JOIN FETCH b.user WHERE b.id = :id")
