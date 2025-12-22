@@ -4,7 +4,7 @@
     <!-- 검색 form 폼 사용-->
     <div class="card mb-4">
         <div class="card-body">
-<!--            12개의 그리드로 나누어지는데-->
+            <!--            12개의 그리드로 나누어지는데-->
             <form action="/board/list" method="get" class="row g-3">
                 <div class="col-md-8">                  <!-- keyword를 서버단에 뿌려줌 -->
                     <input type="text" class="form-control" name="keyword" value="{{#keyword}}{{keyword}}{{/keyword}}">
@@ -46,7 +46,8 @@
 
         {{#boardPage.pageLinks}}
             <li class="page-item {{#active}} active {{/active}}">
-                <a href="/board/list?page={{displayNumber}}&size={{boardPage.size}}" class="page-link">{{displayNumber}}</a>
+                <a href="/board/list?page={{displayNumber}}&size={{boardPage.size}}"
+                class="page-link">{{displayNumber}}</a>
             </li>
         {{/boardPage.pageLinks}}
 
