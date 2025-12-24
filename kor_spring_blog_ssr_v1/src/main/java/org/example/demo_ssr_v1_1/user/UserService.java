@@ -6,8 +6,17 @@ import org.example.demo_ssr_v1_1._core.errors.exception.Exception403;
 import org.example.demo_ssr_v1_1._core.errors.exception.Exception404;
 import org.example.demo_ssr_v1_1._core.errors.exception.Exception500;
 import org.example.demo_ssr_v1_1._core.utils.FileUtil;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestTemplate;
 
 import java.io.IOException;
 
@@ -17,6 +26,122 @@ import java.io.IOException;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    // Lombok 의 @Value 아님!
+    @Value("${oauth.kakao.client-id}")
+    private String clientId;
+
+    @Value("${tenco.key}")
+    private String tencoKey;
+
+    public User 카카오소셜로그인(String code) {
+        // 1. 인가 코드로 액세스 토큰 발급
+        UserResponse.OAuthToken oAuthToken = 카카오액세스토큰발급(code);
+
+        // 2. 액세스 토큰으로 프로필 정보 조회
+        UserResponse.KakaoProfile kakaoProfile = 카카오프로필조회(oAuthToken.getAccessToken());
+
+        // 3. 프로필 정보로 사용자 생성 또는 조회
+        User user = 카카오사용자생성또는조회(kakaoProfile);
+
+        // 4. 컨트롤러 단으로 user 반환
+
+        return user;
+    }
+
+    // 한 파일안에서만 써야함 private 으로 만든다.
+    // '다큐먼트 주석'이라고 한다.
+    /**
+     * 카카오 인가 코드로 액세스 토큰 발급
+     * @param code   카카오 인가 코드
+     * @return Oauth 액세스 토큰 정보
+     */
+    private UserResponse.OAuthToken 카카오액세스토큰발급(String code) {
+
+        RestTemplate restTemplate = new RestTemplate();
+
+        HttpHeaders tokenHeaders = new HttpHeaders();
+        tokenHeaders.add("Content-Type", "application/x-www-form-urlencoded;charset=utf-8");
+
+        MultiValueMap<String, String> tokenParams = new LinkedMultiValueMap<>();
+        tokenParams.add("grant_type", "authorization_code");
+        tokenParams.add("client_id", "ba1a3572901dddea2ab3917241eb467d");
+        tokenParams.add("redirect_uri", "http://localhost:8080/user/kakao");
+        tokenParams.add("code", code); // code는 인가코드
+
+        // TODO - env 파일에 옮겨야 함 시크릿 키 추가(노출 금지)
+        tokenParams.add("client_secret", "JUjP91b4jIX5uRQOoY0dwUU3Gympyxb0");
+
+        HttpEntity<MultiValueMap<String, String>> tokenRequest = new HttpEntity<>(tokenParams, tokenHeaders);
+        ResponseEntity<UserResponse.OAuthToken> tokenResponse = restTemplate.exchange(
+                "https://kauth.kakao.com/oauth/token",
+                HttpMethod.POST,
+                tokenRequest,
+                UserResponse.OAuthToken.class
+        );
+        UserResponse.OAuthToken oAuthToken = tokenResponse.getBody();
+        return oAuthToken;
+    }
+
+    /**
+     * 카카오 액세스 토큰으로 프로필 정보 조회
+     * @param accessToken 카카오 애겟스 토큰
+     * @return kakaoProfile 카카오 프로필 정보
+     */
+    private UserResponse.KakaoProfile 카카오프로필조회(String accessToken) {
+
+        RestTemplate profileRt = new RestTemplate();
+
+        HttpHeaders profileHeaders = new HttpHeaders();
+
+        profileHeaders.add(
+                "Authorization",
+                "Bearer " + accessToken);
+
+        profileHeaders.add("Content-Type", "application/x-www-form-urlencoded;charset=utf-8");
+
+        HttpEntity<Void> profileRequest = new HttpEntity<>(profileHeaders);
+
+        ResponseEntity<UserResponse.KakaoProfile> profileResponse =
+                profileRt.exchange(
+                        "https://kapi.kakao.com/v2/user/me",
+                        HttpMethod.POST,
+                        profileRequest,
+                        UserResponse.KakaoProfile.class
+                );
+
+        UserResponse.KakaoProfile kakaoProfile = profileResponse.getBody();
+        return kakaoProfile;
+    }
+
+    private User 카카오사용자생성또는조회(UserResponse.KakaoProfile kakaoProfile) {
+
+        String username = kakaoProfile.getProperties().getNickname() + "_" + kakaoProfile.getId();
+
+        User userOrigin = findByUsername(username);
+
+        if (userOrigin == null) {
+
+            User newUser = User.builder()
+                    .username(username)
+                    .password(passwordEncoder.encode(tencoKey)) // 소셜 로그인은 임시 비밀번호로 설정 한다.
+                    .email(username + "@kakao.com") // 선택 사항 (카카오 이메일 비즈니스 앱 신청)
+//                    .email(kakaoProfile.getProperties().getEmail())
+                    .provider(OAuthProvider.KAKAO)
+                    .build();
+
+            String profileImage = kakaoProfile.getProperties().getProfileImage();
+            if (profileImage != null && !profileImage.isEmpty()) {
+                newUser.setProfileImage(profileImage); // 카카오에서 넘겨받은 URL 그대로 저장
+            }
+
+            joinSNS(newUser);
+            userOrigin = newUser;   // 조심해야 함! 반드시 필요함!!
+        }
+
+        return userOrigin;
+    }
 
     @Transactional
     public User 회원가입(UserRequest.JoinDTO joinDTO) {
@@ -30,8 +155,8 @@ public class UserService {
         // User 엔티티에 저장할 때는 String 이어야 하고 null 값도 가질 수 있음
         String profileImageFileName = null;
 
-        // 2. 회원 가입시 파일이 넘어 왔는지 확인
-        if (joinDTO.getProfileImage() != null) {
+        // 2. 회원 가입시 파일이 넘어 왔는지 확인 (기본적으로 null 이 넘어올 수도 "" 공백으로 들어올 수 있음)
+        if (joinDTO.getProfileImage() != null && !joinDTO.getProfileImage().isEmpty()) {
             // 2.1 유효성 검사 (이미지 파일 이어야함)
             try {
                 if (!FileUtil.isImageFile(joinDTO.getProfileImage())) {
@@ -43,20 +168,28 @@ public class UserService {
             }
         }
 
+        // 비밀번호를 평문에서 해시값으로 변경 해주어야 한다.
+        // 해싱 --> 해시값을 만들어 줌...
+        String hashPwd = passwordEncoder.encode(joinDTO.getPassword());
         User user = joinDTO.toEntity(profileImageFileName);
+        user.setPassword(hashPwd);
+
         return userRepository.save(user);
     }
 
     public User 로그인(UserRequest.LoginDTO loginDTO) {
 
         // 사용자가 던진 값과  DB에 있는 사용자 이름과 비밀번호를 확인해 주어야 한다.
-        User userEntity = userRepository.findByUsernameAndPasswordWithRoles(loginDTO.getUsername(),
-                        loginDTO.getPassword())
+        User userEntity = userRepository.findByUsernameWithRoles(loginDTO.getUsername())
                 .orElse(null); // 로그인 실패시 null 반환
 
-        if (userEntity == null) {
-            throw new Exception400("사용자명 또는 비밀번호가 올바르지 않습니다");
+        // 비밀번호 검증 (BCrypt matches 메서드를 사용해서 비교하면 된다.)
+        // 일치하면 true, 불일치하면 false 반환
+        if (passwordEncoder.matches(loginDTO.getPassword(), userEntity.getPassword()) == false) {
+            throw new Exception400("사용자명 또는 비밀번호가 올바르지 않습니다.");
         }
+
+        // 기존 샘플 데이터로 회원가입된 사용자들로는 로그인을 못 함!!
 
         return userEntity;
     }
@@ -115,6 +248,10 @@ public class UserService {
             // 새 이미지가 업로드 되지 않았으면 기존 이미지 파일 이름 유지
             updateDTO.setProfileImageFilename(oldProfileImage);
         }
+
+        String hashPwd = passwordEncoder.encode(updateDTO.getPassword());
+        updateDTO.setPassword(hashPwd);
+
         // 객체 상태값 변경 (트랜잭션이 끝나면 자동으로 commit 및 반영해 줄꺼야)
         userEntity.update(updateDTO);
         return userEntity;
@@ -158,5 +295,14 @@ public class UserService {
         // 객체 상태값 변경 (트랜잭션 끝나는 시점 / 더티 체킹)
         userEntity.setProfileImage(null);
         return userEntity;
+    }
+
+    public User findByUsername(String username) {
+        return userRepository.findByUsername(username).orElse(null);
+
+    }
+
+    public void joinSNS(User user) {
+        userRepository.save(user);
     }
 }

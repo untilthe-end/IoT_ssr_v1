@@ -20,9 +20,15 @@ public interface UserRepository extends JpaRepository<User, Long> {
      *
      */
 
+//    // left join 은 user 테이블은 다가져와야하고 roles만 붙이는거
+//    @Query("SELECT distinct u from User u left join fetch u.roles r " +
+//            "where u.username = :username AND u.password = :password")
+//    Optional<User> findByUsernameAndPasswordWithRoles(@Param("username")String username,
+//                                                      @Param("password")String password);
+
     // left join 은 user 테이블은 다가져와야하고 roles만 붙이는거
     @Query("SELECT distinct u from User u left join fetch u.roles r " +
-            "where u.username = :username AND u.password = :password")
-    Optional<User> findByUsernameAndPasswordWithRoles(@Param("username")String username,
-                                                      @Param("password")String password);
+            "where u.username = :username")
+    Optional<User> findByUsernameWithRoles(@Param("username")String username);
+
 }

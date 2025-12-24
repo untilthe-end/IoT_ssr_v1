@@ -1,6 +1,11 @@
 package org.example.demo_ssr_v1_1.user;
 
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.PropertyNamingStrategy;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Data;
+
+import java.util.Properties;
 
 /**
  * 사용자 응답 DTO
@@ -41,6 +46,38 @@ public class UserResponse {
         }
     }
 
+    // 카카오 JWT(액세스 토큰) DTO 설계
+    @Data
+    @JsonNaming(value = PropertyNamingStrategies.SnakeCaseStrategy.class)
+    // @JsonNaming: LowerCamelCaseStrategy  -> token_type -> 이걸 자동으로 camelCase로 변경해줌
+    // @JsonNaming: SnakeCaseStrategy -> tokenType -> 이걸 자동으로 snake_case로 변경해줌
+    public static class OAuthToken {
+        private String tokenType;
+        private String accessToken;
+        private String expiresIn;
+        private String refreshToken;
+        private String refreshTokenExpiresIn;
+    }
+
+    @Data
+    @JsonNaming(value = PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public static class KakaoProfile {
+        private Long id;
+        private String connectedAt;
+        private Properties properties;
+        private String email;
+
+    }
+
+    @Data
+    @JsonNaming(value = PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public static class Properties {
+        private String nickname;
+        private String profileImage;
+        private String thumbnailImage;
+        private String email;
+
+    }
 }
 
 

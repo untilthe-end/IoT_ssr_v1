@@ -2,12 +2,21 @@ package org.example.demo_ssr_v1_1.user;
 
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
-import org.example.demo_ssr_v1_1._core.errors.exception.Exception403;
-import org.example.demo_ssr_v1_1._core.errors.exception.Exception404;
+import org.example.demo_ssr_v1_1._core.errors.exception.Exception401;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.client.RestTemplate;
 
 /**
  *  사용자 Controller (표현 계층) 
@@ -24,6 +33,31 @@ import org.springframework.web.bind.annotation.PostMapping;
 public class UserController {
 
     private final UserService userService;
+
+    @GetMapping("/user/kakao")
+//    @ResponseBody // 화면에 뿌려줘~
+    public String kakaoCallback(@RequestParam(name = "code") String code, HttpSession session) {
+
+        try {
+            // 서비스단에 비즈니스 로직 위임 처리
+            User user = userService.카카오소셜로그인(code);
+
+            // 세션 정보에 사용자 정보 저장
+            session.setAttribute("sessionUser", user);
+            return "redirect:/";
+        } catch (Exception e){
+            System.out.println("소셜 로그인 실패 " + e.getMessage());
+            // alert 창 (에러메세지) --> 로그인 페이지로 이동처리
+            throw new Exception401(e.getMessage());
+        }
+    }
+
+    // 로그인 인터셉터에서 여기 못 들어오게 막고 있음!! 아래 경로 제외시키자
+    // [흐름]
+    // -> 1.인가코드받기
+    // -> 2. 토큰 발급 요청 (JWT)
+    // -> 3. JWT 으로 사용자 정보 요청
+    // -> 4. 우리 서버에 로그인/회원가입 처리
 
     // 프로필 이미지 삭제 하기
     @PostMapping("/user/profile-image/delete")
@@ -79,8 +113,6 @@ public class UserController {
         }
     }
 
-
-
     // 로그아웃 기능 요청
     // http://localhost:8080/logout
     @GetMapping("/logout")
@@ -96,7 +128,6 @@ public class UserController {
     public String loginForm() {
         return "user/login-form";
     }
-
 
     // http://localhost:8080/login
     @PostMapping("/login")
@@ -128,5 +159,4 @@ public class UserController {
         userService.회원가입(joinDTO);
         return "redirect:/login";
     }
-
 }
